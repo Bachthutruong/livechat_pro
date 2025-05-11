@@ -34,7 +34,7 @@ export function PhoneNumberModal({ isOpen, onSubmit, isLoading }: PhoneNumberMod
 
   return (
     <Dialog open={isOpen} onOpenChange={() => { /* Modal should be controlled by parent state */ }}>
-      <DialogContent className="sm:max-w-md"> {/* Increased width from sm:max-w-[425px] */}
+      <DialogContent className="sm:max-w-lg"> {/* Increased width from sm:max-w-md */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Phone className="text-primary" /> Welcome to AetherChat!
@@ -45,8 +45,8 @@ export function PhoneNumberModal({ isOpen, onSubmit, isLoading }: PhoneNumberMod
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="phone" className="text-right">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="phone">
                 Phone
               </Label>
               <Input
@@ -54,7 +54,7 @@ export function PhoneNumberModal({ isOpen, onSubmit, isLoading }: PhoneNumberMod
                 type="tel"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
-                className="col-span-3"
+                className="w-full"
                 placeholder="e.g., (123) 456-7890"
                 required
                 disabled={isLoading}
