@@ -1,7 +1,7 @@
 // src/app/actions.ts
 'use server';
 
-import type { Message, UserSession, AppointmentDetails, Product, Note, CustomerProfile, UserRole, KeywordMapping, TrainingData, TrainingDataStatus, AppSettings, GetAppointmentsFilters, AdminDashboardStats, StaffDashboardStats, ProductItem, Reminder, ReminderStatus, ReminderPriority, SpecificDayRule, CustomerInteractionStatus, Conversation, AppointmentBookingFormData, Branch, BranchSpecificDayRule } from '@/lib/types';
+import type { Message, UserSession, AppointmentDetails, Product, Note, CustomerProfile, UserRole, KeywordMapping, TrainingData, TrainingDataStatus, AppSettings, GetAppointmentsFilters, AdminDashboardStats, StaffDashboardStats, ProductItem, Reminder, ReminderStatus, ReminderPriority, SpecificDayRule, CustomerInteractionStatus, Conversation, AppointmentBookingFormData, Branch, BranchSpecificDayRule, SuggestedQuestion } from '@/lib/types';
 import type { AppointmentRule as LibAppointmentRuleType, Conversation as LibConversationType } from '@/lib/types'; // Aliased for clarity
 import { answerUserQuestion } from '@/ai/flows/answer-user-question';
 import { generateSuggestedReplies } from '@/ai/flows/generate-suggested-replies';
@@ -243,7 +243,11 @@ function transformAppSettingsDoc(doc: IAppSettings | null): AppSettings | null {
   const defaultBrandName = 'AetherChat';
   const defaultSettings: Partial<AppSettings> = {
     greetingMessage: 'Tôi là trợ lý AI của bạn. Tôi có thể giúp gì cho bạn hôm nay? Bạn có thể hỏi về dịch vụ hoặc đặt lịch hẹn.',
-    suggestedQuestions: ['Các dịch vụ của bạn?', 'Đặt lịch hẹn', 'Địa chỉ của bạn ở đâu?'],
+    suggestedQuestions: [
+      { question: 'Các dịch vụ của bạn?', answer: 'Chúng tôi cung cấp dịch vụ tư vấn, đặt lịch hẹn và hỗ trợ khách hàng.' },
+      { question: 'Đặt lịch hẹn', answer: 'Bạn có thể đặt lịch hẹn bằng cách cho tôi biết loại dịch vụ và thời gian bạn muốn đến.' },
+      { question: 'Địa chỉ của bạn ở đâu?', answer: 'Địa chỉ của chúng tôi là 123 Đường ABC, Quận XYZ.' }
+    ],
     brandName: defaultBrandName,
     footerText: `© ${new Date().getFullYear()} ${defaultBrandName}. Đã đăng ký Bản quyền.`,
     metaTitle: `${defaultBrandName} - Live Chat Thông Minh`,
@@ -268,11 +272,22 @@ function transformAppSettingsDoc(doc: IAppSettings | null): AppSettings | null {
     return plainRule;
   }) || defaultSettings.specificDayRules;
 
+  // Properly transform suggestedQuestions to ensure consistent format
+  const suggestedQuestionsFormatted = doc.suggestedQuestions?.map(item => {
+    if (typeof item === 'object' && item !== null && 'question' in item && 'answer' in item) {
+      return item as SuggestedQuestion;
+    } else {
+      return {
+        question: String(item),
+        answer: 'Không có câu trả lời được đặt trước cho câu hỏi này.'
+      };
+    }
+  }) || defaultSettings.suggestedQuestions;
 
   return {
     id: (doc._id as Types.ObjectId).toString(),
     greetingMessage: doc.greetingMessage || defaultSettings.greetingMessage,
-    suggestedQuestions: doc.suggestedQuestions && doc.suggestedQuestions.length > 0 ? doc.suggestedQuestions : defaultSettings.suggestedQuestions!,
+    suggestedQuestions: suggestedQuestionsFormatted,
     brandName: doc.brandName || defaultSettings.brandName,
     logoUrl: doc.logoUrl,
     logoDataUri: doc.logoDataUri,
@@ -303,6 +318,8 @@ export async function getAppSettings(): Promise<AppSettings | null> {
 export async function updateAppSettings(settings: Partial<Omit<AppSettings, 'id' | 'updatedAt'>>): Promise<AppSettings | null> {
   await dbConnect();
   const processedSettings = { ...settings };
+
+  // Handle specificDayRules properly
   if (processedSettings.specificDayRules) {
     processedSettings.specificDayRules = processedSettings.specificDayRules.map(rule => {
       const { id, ...restOfRule } = rule;
@@ -310,8 +327,36 @@ export async function updateAppSettings(settings: Partial<Omit<AppSettings, 'id'
     });
   }
 
-  const updatedSettingsDoc = await AppSettingsModel.findOneAndUpdate({}, { $set: processedSettings }, { new: true, upsert: true, runValidators: true });
-  return transformAppSettingsDoc(updatedSettingsDoc);
+  // Ensure suggestedQuestions are plain objects without any class methods/prototypes
+  if (processedSettings.suggestedQuestions) {
+    processedSettings.suggestedQuestions = processedSettings.suggestedQuestions.map(q => {
+      // If it's a string, convert to object
+      if (typeof q === 'string') {
+        return { question: q, answer: 'Không có câu trả lời được đặt trước cho câu hỏi này.' };
+      }
+      // If it's already an object, ensure it has the right structure
+      if (typeof q === 'object' && q !== null) {
+        return {
+          question: q.question || String(q),
+          answer: q.answer || 'Không có câu trả lời được đặt trước cho câu hỏi này.'
+        };
+      }
+      // Fallback for any other type
+      return { question: String(q), answer: 'Không có câu trả lời được đặt trước cho câu hỏi này.' };
+    });
+  }
+
+  try {
+    const updatedSettingsDoc = await AppSettingsModel.findOneAndUpdate(
+      {},
+      { $set: processedSettings },
+      { new: true, upsert: true, runValidators: true }
+    );
+    return transformAppSettingsDoc(updatedSettingsDoc);
+  } catch (error) {
+    console.error("Error updating app settings:", error);
+    throw error;
+  }
 }
 
 
@@ -346,13 +391,7 @@ export async function createNewConversationForUser(userId: string, title?: strin
   return transformConversationDoc(savedConversation);
 }
 
-export async function handleCustomerAccess(phoneNumber: string): Promise<{
-  userSession: UserSession;
-  initialMessages: Message[];
-  initialSuggestedReplies: string[];
-  activeConversationId: string;
-  conversations: Conversation[];
-}> {
+export async function handleCustomerAccess(phoneNumber: string): Promise<{ userSession: UserSession; initialMessages: Message[]; initialSuggestedReplies: { question: string; answer: string }[]; activeConversationId: string; conversations: Conversation[]; }> {
   await dbConnect();
   if (!validatePhoneNumber(phoneNumber)) {
     throw new Error("Số điện thoại không hợp lệ.");
@@ -533,7 +572,7 @@ export async function processUserMessage(
   currentUserSession: UserSession,
   currentConversationId: string,
   currentChatHistory: Message[]
-): Promise<{ aiMessage: Message; newSuggestedReplies: string[]; updatedAppointment?: AppointmentDetails }> {
+): Promise<{ aiMessage: Message; newSuggestedReplies: { question: string; answer: string }[]; updatedAppointment?: AppointmentDetails }> {
   await dbConnect();
 
   const customerId = currentUserSession.id;
@@ -915,7 +954,7 @@ export async function processUserMessage(
   });
 
 
-  const newSuggestedReplies: string[] = [];
+  const newSuggestedReplies: { question: string; answer: string }[] = [];
 
   const updatedAppointmentClient = processedAppointmentDB ? transformAppointmentDocToDetails(processedAppointmentDB) : undefined;
   if (updatedAppointmentClient) {
@@ -2387,3 +2426,75 @@ export async function deleteBranch(id: string): Promise<{ success: boolean }> {
 
 // Helper function to retrieve customers for select (already defined, ensure it's exported)
 // export async function getCustomerListForSelect(): Promise<{ id: string; name: string; phoneNumber: string }[]>
+
+// Function to get booked slots for a specific date and branch
+export async function getBookedSlots(date: string, branchId: string): Promise<string[]> {
+  await dbConnect();
+  try {
+    // Check if the branch exists and is active
+    const branch = await BranchModel.findOne({ _id: branchId, isActive: true });
+    if (!branch) {
+      return [];
+    }
+
+    // Parse the date
+    const selectedDate = new Date(date);
+    const dayOfWeek = selectedDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
+
+    // Check if it's a specific day override
+    const specificOverride = branch.specificDayOverrides?.find(
+      override => new Date(override.date).toDateString() === selectedDate.toDateString()
+    );
+
+    // If it's marked as a day off, return all slots as booked
+    if (specificOverride?.isOff) {
+      return branch.workingHours || [];
+    }
+
+    // Check if it's a common off day (Sunday)
+    if (dayOfWeek === 0 && (!branch.offDays?.includes(0) === false)) {
+      return branch.workingHours || [];
+    }
+
+    // Query appointments for this date and branch
+    const appointments = await AppointmentModel.find({
+      date: date,
+      branchId: branchId,
+      status: { $nin: ['cancelled', 'completed'] }, // Only consider active appointments
+    });
+
+    // Extract the time slots that are already booked
+    const bookedTimes = appointments.map(appointment => appointment.time);
+
+    // If there are too many appointments for that day based on staff capacity, mark the day as fully booked
+    const maxAppointmentsPerDay = specificOverride?.numberOfStaff || branch.numberOfStaff || 1;
+    if (appointments.length >= maxAppointmentsPerDay * 8) { // Assuming each staff member can handle 8 appointments per day
+      return branch.workingHours || [];
+    }
+
+    // Get booked slots per hour
+    const bookedSlotsCountPerHour: Record<string, number> = {};
+    appointments.forEach(appointment => {
+      const hourKey = appointment.time.split(':')[0];
+      bookedSlotsCountPerHour[hourKey] = (bookedSlotsCountPerHour[hourKey] || 0) + 1;
+    });
+
+    // Return time slots that are fully booked based on staff capacity
+    const fullyBookedSlots: string[] = [];
+    for (const [hour, count] of Object.entries(bookedSlotsCountPerHour)) {
+      if (count >= maxAppointmentsPerDay) {
+        // If this hour is fully booked, add all time slots for this hour
+        branch.workingHours?.forEach(slot => {
+          if (slot.startsWith(hour)) {
+            fullyBookedSlots.push(slot);
+          }
+        });
+      }
+    }
+
+    return [...new Set([...bookedTimes, ...fullyBookedSlots])];
+  } catch (error) {
+    console.error('Error getting booked slots:', error);
+    return [];
+  }
+}

@@ -1,10 +1,11 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import type { SuggestedQuestion } from '@/lib/types';
 
 type SuggestedRepliesProps = {
-  replies: string[];
-  onReplyClick: (reply: string) => void;
+  replies: SuggestedQuestion[];
+  onReplyClick: (reply: SuggestedQuestion) => void;
   isLoading?: boolean;
 };
 
@@ -24,7 +25,7 @@ export function SuggestedReplies({ replies, onReplyClick, isLoading }: Suggested
           disabled={isLoading}
           className="bg-background hover:bg-muted"
         >
-          {reply}
+          {reply.question}
         </Button>
       ))}
     </div>

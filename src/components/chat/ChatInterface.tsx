@@ -1,4 +1,3 @@
-
 // src/components/chat/ChatInterface.tsx
 'use client';
 
@@ -7,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Edit3, Trash2, Pin, PinOff } from 'lucide-react';
 import { ChatWindow } from './ChatWindow';
-import type { Conversation, Message, UserSession, MessageViewerRole } from '@/lib/types';
+import type { Conversation, Message, UserSession, MessageViewerRole, SuggestedQuestion } from '@/lib/types';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -31,8 +30,9 @@ type ChatInterfaceProps = {
   activeConversationId: string | null;
   messages: Message[];
   pinnedMessages?: Message[];
-  suggestedReplies: string[];
+  suggestedReplies: SuggestedQuestion[];
   onSendMessage: (messageContent: string) => void;
+  onSuggestedReplyClick: (reply: SuggestedQuestion) => void;
   onSelectConversation: (conversationId: string) => void;
   onCreateNewConversation?: () => void;
   isChatLoading: boolean;
@@ -56,6 +56,7 @@ export function ChatInterface({
   pinnedMessages,
   suggestedReplies,
   onSendMessage,
+  onSuggestedReplyClick,
   onSelectConversation,
   onCreateNewConversation,
   isChatLoading,
@@ -106,9 +107,10 @@ export function ChatInterface({
 
   return (
     <div className={cn(
-        "flex h-full w-full bg-background text-foreground",
-        !shouldShowConversationSidebar && "flex-col" 
-      )}>
+      "flex h-full bg-background text-foreground",
+      shouldShowConversationSidebar ? "w-full" : "w-full md:w-[900px] mx-auto",
+      !shouldShowConversationSidebar && "flex-col"
+    )}>
       {shouldShowConversationSidebar && onCreateNewConversation && (
         <div className="w-full md:w-72 lg:w-80 border-r border-border flex flex-col h-full bg-card flex-shrink-0 shadow-none">
           <div className="p-3 border-b border-border">
@@ -127,7 +129,7 @@ export function ChatInterface({
               <p className="p-4 text-sm text-muted-foreground text-center">Không có cuộc trò chuyện nào.</p>
             )}
             {isChatLoading && sortedConversations.length === 0 && (
-                 <p className="p-4 text-sm text-muted-foreground text-center">Đang tải...</p>
+              <p className="p-4 text-sm text-muted-foreground text-center">Đang tải...</p>
             )}
             <ul>
               {sortedConversations.map((conv) => (
@@ -144,19 +146,19 @@ export function ChatInterface({
                       </span>
                       <div className="flex-shrink-0 space-x-1">
                         {onUpdateConversationTitle && (
-                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); handleOpenTitleModal(conv);}} title="Sửa tiêu đề">
+                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); handleOpenTitleModal(conv); }} title="Sửa tiêu đề">
                             <Edit3 className="h-3 w-3" />
                           </Button>
                         )}
                         {conv.isPinned && onUnpinConversation && (
-                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); onUnpinConversation(conv.id);}} title="Bỏ ghim">
-                                <PinOff className="h-3 w-3 text-amber-600" />
-                            </Button>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); onUnpinConversation(conv.id); }} title="Bỏ ghim">
+                            <PinOff className="h-3 w-3 text-amber-600" />
+                          </Button>
                         )}
                         {!conv.isPinned && onPinConversation && (
-                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); onPinConversation(conv.id);}} title="Ghim">
-                                <Pin className="h-3 w-3" />
-                            </Button>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => { e.stopPropagation(); onPinConversation(conv.id); }} title="Ghim">
+                            <Pin className="h-3 w-3" />
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -177,7 +179,10 @@ export function ChatInterface({
       )}
 
       {/* Main chat window */}
-      <div className="flex-grow flex flex-col h-full overflow-hidden bg-background shadow-none border-none w-full">
+      <div className={cn(
+        "flex-grow flex flex-col h-full overflow-hidden bg-background shadow-lg border my-4 rounded-lg",
+        shouldShowConversationSidebar ? "w-full" : "w-full md:w-[900px] md:max-w-[1000px] mx-auto"
+      )}>
         {(activeConversationId || viewerRole === 'customer_view') ? (
           <ChatWindow
             userSession={userSession}
@@ -185,7 +190,7 @@ export function ChatInterface({
             pinnedMessages={pinnedMessages}
             suggestedReplies={suggestedReplies}
             onSendMessage={onSendMessage}
-            onSuggestedReplyClick={onSendMessage}
+            onSuggestedReplyClick={onSuggestedReplyClick}
             isLoading={isChatLoading}
             viewerRole={viewerRole}
             onPinMessage={onPinMessage}
@@ -197,13 +202,13 @@ export function ChatInterface({
           />
         ) : (
           !shouldShowConversationSidebar ? null :
-          <div className="flex-grow flex items-center justify-center p-4">
-            <p className="text-muted-foreground">Chọn một cuộc trò chuyện để bắt đầu.</p>
-          </div>
+            <div className="flex-grow flex items-center justify-center p-4">
+              <p className="text-muted-foreground">Chọn một cuộc trò chuyện để bắt đầu.</p>
+            </div>
         )}
       </div>
 
-       <Dialog open={isTitleModalOpen} onOpenChange={setIsTitleModalOpen}>
+      <Dialog open={isTitleModalOpen} onOpenChange={setIsTitleModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Sửa Tiêu đề Cuộc trò chuyện</DialogTitle>
@@ -230,4 +235,3 @@ export function ChatInterface({
     </div>
   );
 }
-    

@@ -10,10 +10,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import type { AppointmentBookingFormData, UserSession, ProductItem, Branch } from '@/lib/types';
-import { format, addMinutes, startOfHour, setHours, setMinutes } from 'date-fns';
+import { format, addMinutes, startOfHour, setHours, setMinutes, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-import { getCustomerListForSelect, getAllProducts, getBranches, getAppSettings } from '@/app/actions';
+import { getCustomerListForSelect, getAllProducts, getBranches, getAppSettings, getBookedSlots } from '@/app/actions';
 
 interface AppointmentBookingFormProps {
   isOpen: boolean;
@@ -28,9 +28,9 @@ const generateTimeSlots = async () => {
     // Fallback to default time slots if no working hours configured
     const slots = [];
     let date = startOfHour(new Date());
-    date = setHours(date, 0);
+    date = setHours(date, 8); // Start from 8 AM
     date = setMinutes(date, 0);
-    for (let i = 0; i < 24 * 4; i++) {
+    for (let i = 0; i < 12 * 4; i++) { // Generate slots from 8 AM to 8 PM
       slots.push(format(date, 'HH:mm'));
       date = addMinutes(date, 15);
     }
@@ -42,7 +42,7 @@ const generateTimeSlots = async () => {
 export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserSession }: AppointmentBookingFormProps) {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [time, setTime] = useState('09:00');
+  const [time, setTime] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,7 +53,12 @@ export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserS
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [isFullyBooked, setIsFullyBooked] = useState(false);
+  const [isDayOff, setIsDayOff] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
 
+  // Load initial data
   useEffect(() => {
     if (isOpen) {
       const fetchData = async () => {
@@ -64,20 +69,99 @@ export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserS
             (currentUserSession?.role === 'admin' || currentUserSession?.role === 'staff') ? getCustomerListForSelect() : Promise.resolve([]),
             generateTimeSlots()
           ]);
-          setProducts(fetchedProducts.filter(p => p.isActive));
+
+          const filteredProducts = fetchedProducts.filter(p => p.isActive);
+          setProducts(filteredProducts);
           setBranches(fetchedBranches);
           setCustomerList(fetchedCustomers);
           setTimeSlots(fetchedTimeSlots);
+          setAvailableTimeSlots(fetchedTimeSlots); // Initialize with all time slots
+
+          // Set default selections if possible
+          if (fetchedBranches.length > 0) {
+            setSelectedBranchId(fetchedBranches[0].id);
+          }
+
+          if (filteredProducts.length > 0) {
+            setSelectedProductId(filteredProducts[0].id);
+          }
+
           if (currentUserSession?.role === 'customer') {
             setSelectedCustomerId(currentUserSession.id);
           }
+
+          if (fetchedTimeSlots.length > 0) {
+            setTime(fetchedTimeSlots[0]);
+          }
         } catch (error) {
+          console.error('Error loading initial data:', error);
           toast({ title: "Lỗi tải dữ liệu", description: "Không thể tải danh sách dịch vụ, chi nhánh hoặc khách hàng.", variant: "destructive" });
         }
       };
       fetchData();
     }
   }, [currentUserSession, isOpen, toast]);
+
+  // Check for available time slots when date or branch changes
+  useEffect(() => {
+    const checkAvailability = async () => {
+      if (!selectedDate) {
+        setAvailableTimeSlots(timeSlots);
+        setIsFullyBooked(false);
+        setIsDayOff(false);
+        return;
+      }
+
+      // Check if it's a day off (e.g., Sunday)
+      const dayOfWeek = selectedDate.getDay();
+      const isWeekend = dayOfWeek === 0; // Sunday
+
+      if (isWeekend) {
+        setIsDayOff(true);
+        setIsFullyBooked(false);
+        setAvailableTimeSlots([]);
+        return;
+      }
+
+      try {
+        // Get booked slots for this date and branch
+        let fetchedBookedSlots: string[] = [];
+
+        if (selectedBranchId) {
+          // You need to implement this server action to fetch booked slots
+          fetchedBookedSlots = await getBookedSlots(
+            format(selectedDate, 'yyyy-MM-dd'),
+            selectedBranchId
+          );
+        }
+
+        setBookedSlots(fetchedBookedSlots);
+
+        // Filter out booked slots
+        const available = timeSlots.filter(slot => !fetchedBookedSlots.includes(slot));
+        setAvailableTimeSlots(available);
+
+        // Check if all slots are booked
+        setIsFullyBooked(available.length === 0);
+        setIsDayOff(false);
+
+        // Set default time if current selection is not available
+        if (available.length > 0 && (!time || !available.includes(time))) {
+          setTime(available[0]);
+        }
+      } catch (error) {
+        console.error('Error checking availability:', error);
+        // Fallback to all time slots if there's an error
+        setAvailableTimeSlots(timeSlots);
+        setIsFullyBooked(false);
+        setIsDayOff(false);
+      }
+    };
+
+    if (timeSlots.length > 0) {
+      checkAvailability();
+    }
+  }, [selectedDate, selectedBranchId, timeSlots, time]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +219,20 @@ export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserS
             </Select>
           </div>
 
+          {branches.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="branch" className="text-sm font-medium">Chi nhánh <span className="text-destructive">*</span></Label>
+              <Select value={selectedBranchId} onValueChange={setSelectedBranchId} disabled={isSubmitting}>
+                <SelectTrigger id="branch" className="w-full">
+                  <SelectValue placeholder="Chọn chi nhánh" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Date and Time selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -154,48 +252,48 @@ export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserS
             <div className="space-y-2">
               <Label htmlFor="time" className="text-sm font-medium">Giờ <span className="text-destructive">*</span></Label>
               <div className="border rounded-md h-full flex flex-col">
-                <Select value={time} onValueChange={setTime} disabled={isSubmitting}>
-                  <SelectTrigger id="time" className="w-full border-0 h-10">
-                    <SelectValue placeholder="Chọn giờ" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {timeSlots.map(slot => <SelectItem key={slot} value={slot}>{slot}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <div className="flex-1 p-3 overflow-y-auto">
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {timeSlots.map(slot => (
-                      <Button
-                        key={slot}
-                        type="button"
-                        variant={time === slot ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setTime(slot)}
-                        disabled={isSubmitting}
-                        className="text-xs"
-                      >
-                        {slot}
-                      </Button>
-                    ))}
+                {isDayOff || isFullyBooked ? (
+                  <div className="flex-1 flex items-center justify-center p-4 text-destructive font-medium">
+                    Ngừng nhận khách
                   </div>
-                </div>
+                ) : availableTimeSlots.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center p-4 text-muted-foreground">
+                    Đang tải khung giờ...
+                  </div>
+                ) : (
+                  <>
+                    <Select value={time} onValueChange={setTime} disabled={isSubmitting}>
+                      <SelectTrigger id="time" className="w-full border-0 h-10">
+                        <SelectValue placeholder="Chọn giờ" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {availableTimeSlots.map(slot => (
+                          <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex-1 p-3 overflow-y-auto">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {availableTimeSlots.map(slot => (
+                          <Button
+                            key={slot}
+                            type="button"
+                            variant={time === slot ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setTime(slot)}
+                            disabled={isSubmitting}
+                            className="text-xs"
+                          >
+                            {slot}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
-
-          {branches.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="branch" className="text-sm font-medium">Chi nhánh <span className="text-destructive">*</span></Label>
-              <Select value={selectedBranchId} onValueChange={setSelectedBranchId} disabled={isSubmitting}>
-                <SelectTrigger id="branch" className="w-full">
-                  <SelectValue placeholder="Chọn chi nhánh" />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes" className="text-sm font-medium">Ghi chú (Tùy chọn)</Label>
@@ -218,7 +316,7 @@ export function AppointmentBookingForm({ isOpen, onClose, onSubmit, currentUserS
               </DialogClose>
               <Button
                 type="submit"
-                disabled={isSubmitting || !selectedProductId || (branches.length > 0 && !selectedBranchId)}
+                disabled={isSubmitting || !selectedProductId || (branches.length > 0 && !selectedBranchId) || isDayOff || isFullyBooked || !time}
                 className="w-full sm:w-auto"
               >
                 {isSubmitting ? 'Đang xử lý...' : 'Đặt lịch'}

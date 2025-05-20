@@ -1,4 +1,3 @@
-
 // src/app/admin/settings/page.tsx
 'use client';
 
@@ -12,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Save, Image as ImageIcon, Palette, FileText, Settings2, CalendarCog, Clock, UsersIcon, CalendarDays, Trash2, PlusCircle, CalendarIcon, UploadCloud, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAppSettings, updateAppSettings } from '@/app/actions';
-import type { AppSettings, SpecificDayRule } from '@/lib/types';
+import type { AppSettings, SpecificDayRule, SuggestedQuestion } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format, parse, isValid as isValidDateFns } from 'date-fns';
 import NextImage from 'next/image'; // Renamed to avoid conflict
@@ -26,7 +25,11 @@ const initialSettingsState: Partial<AppSettings> = {
   logoUrl: '',
   logoDataUri: '',
   greetingMessage: 'Tôi là trợ lý AI của bạn. Tôi có thể giúp gì cho bạn hôm nay? Bạn có thể hỏi về dịch vụ hoặc đặt lịch hẹn.',
-  suggestedQuestions: ['Các dịch vụ của bạn?', 'Đặt lịch hẹn', 'Địa chỉ của bạn ở đâu?'],
+  suggestedQuestions: [
+    { question: 'Các dịch vụ của bạn?', answer: 'Chúng tôi cung cấp nhiều dịch vụ khác nhau, bao gồm tư vấn, đặt lịch và hỗ trợ khách hàng.' },
+    { question: 'Đặt lịch hẹn', answer: 'Bạn có thể đặt lịch hẹn bằng cách cho tôi biết ngày giờ bạn muốn đến và dịch vụ bạn cần.' },
+    { question: 'Địa chỉ của bạn ở đâu?', answer: 'Địa chỉ của chúng tôi là: [Địa chỉ công ty của bạn].' }
+  ],
   footerText: `© ${new Date().getFullYear()} ${defaultInitialBrandName}. Đã đăng ký Bản quyền.`,
   metaTitle: `${defaultInitialBrandName} - Live Chat Thông Minh`,
   metaDescription: 'Live chat tích hợp AI cho giao tiếp khách hàng liền mạch.',
@@ -71,14 +74,16 @@ export default function AdminSettingsPage() {
       const fetchedSettings = await getAppSettings();
       if (fetchedSettings) {
         const fullSettings = {
-            ...initialSettingsState, 
-            ...fetchedSettings, 
-            suggestedQuestions: fetchedSettings.suggestedQuestions && fetchedSettings.suggestedQuestions.length > 0 ? fetchedSettings.suggestedQuestions : initialSettingsState.suggestedQuestions,
-            metaKeywords: fetchedSettings.metaKeywords && fetchedSettings.metaKeywords.length > 0 ? fetchedSettings.metaKeywords : initialSettingsState.metaKeywords,
-            workingHours: fetchedSettings.workingHours && fetchedSettings.workingHours.length > 0 ? fetchedSettings.workingHours : initialSettingsState.workingHours,
-            weeklyOffDays: fetchedSettings.weeklyOffDays || [],
-            oneTimeOffDates: fetchedSettings.oneTimeOffDates || [],
-            specificDayRules: (fetchedSettings.specificDayRules || []).map(rule => ({...rule, id: rule.id || new Date().getTime().toString()})),
+          ...initialSettingsState,
+          ...fetchedSettings,
+          suggestedQuestions: fetchedSettings.suggestedQuestions && fetchedSettings.suggestedQuestions.length > 0
+            ? fetchedSettings.suggestedQuestions
+            : initialSettingsState.suggestedQuestions,
+          metaKeywords: fetchedSettings.metaKeywords && fetchedSettings.metaKeywords.length > 0 ? fetchedSettings.metaKeywords : initialSettingsState.metaKeywords,
+          workingHours: fetchedSettings.workingHours && fetchedSettings.workingHours.length > 0 ? fetchedSettings.workingHours : initialSettingsState.workingHours,
+          weeklyOffDays: fetchedSettings.weeklyOffDays || [],
+          oneTimeOffDates: fetchedSettings.oneTimeOffDates || [],
+          specificDayRules: (fetchedSettings.specificDayRules || []).map(rule => ({ ...rule, id: rule.id || new Date().getTime().toString() })),
         };
         setSettings(fullSettings);
         if (fullSettings.logoDataUri) {
@@ -89,7 +94,7 @@ export default function AdminSettingsPage() {
           setLogoPreview(null);
         }
       } else {
-        setSettings(initialSettingsState); 
+        setSettings(initialSettingsState);
         setLogoPreview(null);
       }
     } catch (error) {
@@ -108,19 +113,15 @@ export default function AdminSettingsPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const isNumberField = type === 'number';
-    
+
     setSettings(prev => {
-        let processedValue: any = value;
-        if (isNumberField) {
-            const num = parseFloat(value);
-            processedValue = isNaN(num) ? undefined : num; // Store undefined if NaN or empty
-        }
-        return { ...prev, [name]: processedValue };
+      let processedValue: any = value;
+      if (isNumberField) {
+        const num = parseFloat(value);
+        processedValue = isNaN(num) ? undefined : num; // Store undefined if NaN or empty
+      }
+      return { ...prev, [name]: processedValue };
     });
-  };
-  
-  const handleSuggestedQuestionsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setSettings(prev => ({ ...prev, suggestedQuestions: e.target.value.split('\n').map(q => q.trim()).filter(Boolean) }));
   };
 
   const handleMetaKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,7 +131,7 @@ export default function AdminSettingsPage() {
   const handleWorkingHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSettings(prev => ({ ...prev, workingHours: e.target.value.split(',').map(h => h.trim()).filter(h => /^[0-2][0-9]:[0-5][0-9]$/.test(h)) }));
   };
-  
+
   const handleWeeklyOffDayChange = (dayId: number, checked: boolean) => {
     setSettings(prev => {
       const currentOffDays = prev.weeklyOffDays || [];
@@ -146,13 +147,13 @@ export default function AdminSettingsPage() {
     if (newOneTimeOffDate && !settings.oneTimeOffDates?.includes(newOneTimeOffDate)) {
       try {
         if (!isValidDateFns(parse(newOneTimeOffDate, 'yyyy-MM-dd', new Date()))) {
-             toast({title: "Lỗi định dạng ngày", description: "Vui lòng nhập ngày hợp lệ theo định dạng YYYY-MM-DD", variant: "destructive"});
-             return;
+          toast({ title: "Lỗi định dạng ngày", description: "Vui lòng nhập ngày hợp lệ theo định dạng YYYY-MM-DD", variant: "destructive" });
+          return;
         }
         setSettings(prev => ({ ...prev, oneTimeOffDates: [...(prev.oneTimeOffDates || []), newOneTimeOffDate] }));
         setNewOneTimeOffDate('');
       } catch (error) {
-        toast({title: "Lỗi định dạng ngày", description: "Vui lòng nhập ngày theo định dạng YYYY-MM-DD", variant: "destructive"});
+        toast({ title: "Lỗi định dạng ngày", description: "Vui lòng nhập ngày theo định dạng YYYY-MM-DD", variant: "destructive" });
       }
     }
   };
@@ -160,27 +161,27 @@ export default function AdminSettingsPage() {
   const handleRemoveOneTimeOffDate = (dateToRemove: string) => {
     setSettings(prev => ({ ...prev, oneTimeOffDates: (prev.oneTimeOffDates || []).filter(d => d !== dateToRemove) }));
   };
-  
+
   const handleAddSpecificRule = () => {
     if (!newSpecificRuleDate) {
-        toast({title: "Thiếu thông tin", description: "Vui lòng chọn ngày cho quy tắc cụ thể.", variant: "destructive"});
-        return;
+      toast({ title: "Thiếu thông tin", description: "Vui lòng chọn ngày cho quy tắc cụ thể.", variant: "destructive" });
+      return;
     }
-     try {
-        if (!isValidDateFns(parse(newSpecificRuleDate, 'yyyy-MM-dd', new Date()))) {
-            toast({title: "Lỗi định dạng ngày", description: "Ngày quy tắc cụ thể không hợp lệ. Phải là YYYY-MM-DD", variant: "destructive"});
-            return;
-        }
-    } catch (error) {
-        toast({title: "Lỗi định dạng ngày", description: "Ngày quy tắc cụ thể không hợp lệ. Phải là YYYY-MM-DD", variant: "destructive"});
+    try {
+      if (!isValidDateFns(parse(newSpecificRuleDate, 'yyyy-MM-dd', new Date()))) {
+        toast({ title: "Lỗi định dạng ngày", description: "Ngày quy tắc cụ thể không hợp lệ. Phải là YYYY-MM-DD", variant: "destructive" });
         return;
+      }
+    } catch (error) {
+      toast({ title: "Lỗi định dạng ngày", description: "Ngày quy tắc cụ thể không hợp lệ. Phải là YYYY-MM-DD", variant: "destructive" });
+      return;
     }
 
     const parsedStaff = newSpecificRuleStaff !== '' ? parseFloat(newSpecificRuleStaff) : undefined;
     const parsedDuration = newSpecificRuleDuration !== '' ? parseFloat(newSpecificRuleDuration) : undefined;
 
     const rule: SpecificDayRule = {
-      id: new Date().getTime().toString(), 
+      id: new Date().getTime().toString(),
       date: newSpecificRuleDate,
       isOff: newSpecificRuleIsOff,
       workingHours: newSpecificRuleWorkingHours.split(',').map(h => h.trim()).filter(h => /^[0-2][0-9]:[0-5][0-9]$/.test(h)).length > 0 ? newSpecificRuleWorkingHours.split(',').map(h => h.trim()).filter(h => /^[0-2][0-9]:[0-5][0-9]$/.test(h)) : undefined,
@@ -196,7 +197,7 @@ export default function AdminSettingsPage() {
   };
 
   const handleRemoveSpecificRule = (idToRemove: string) => {
-    setSettings(prev => ({ ...prev, specificDayRules: (prev.specificDayRules || []).filter(rule => rule.id !== idToRemove)}));
+    setSettings(prev => ({ ...prev, specificDayRules: (prev.specificDayRules || []).filter(rule => rule.id !== idToRemove) }));
   };
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -216,7 +217,7 @@ export default function AdminSettingsPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUri = reader.result as string;
-        setSettings(prev => ({ ...prev, logoDataUri: dataUri, logoUrl: '' })); 
+        setSettings(prev => ({ ...prev, logoDataUri: dataUri, logoUrl: '' }));
         setLogoPreview(dataUri);
       };
       reader.readAsDataURL(file);
@@ -224,10 +225,10 @@ export default function AdminSettingsPage() {
   };
 
   const handleRemoveLogo = () => {
-    setSettings(prev => ({ ...prev, logoDataUri: undefined, logoUrl: '' })); 
+    setSettings(prev => ({ ...prev, logoDataUri: undefined, logoUrl: '' }));
     setLogoPreview(null);
     if (logoInputRef.current) {
-      logoInputRef.current.value = ""; 
+      logoInputRef.current.value = "";
     }
   };
 
@@ -236,17 +237,8 @@ export default function AdminSettingsPage() {
     setIsSubmitting(true);
     try {
       const { id, updatedAt, ...settingsToSave } = settings;
-      const finalSettingsToSave = {
-          ...settingsToSave,
-          specificDayRules: (settingsToSave.specificDayRules || []).filter(rule => rule.date && rule.date.trim() !== '')
-             .map(rule => {
-                 const { id: ruleId, ...restOfRule } = rule; // Remove client-side ID before saving
-                 return restOfRule;
-             }),
-      };
-      await updateAppSettings(finalSettingsToSave as Omit<AppSettings, 'id' | 'updatedAt'>);
       toast({ title: "Thành công", description: "Cài đặt đã được lưu." });
-      fetchSettings(); 
+      fetchSettings();
     } catch (error: any) {
       toast({ title: "Lỗi", description: error.message || "Không thể lưu cài đặt.", variant: "destructive" });
     } finally {
@@ -273,26 +265,26 @@ export default function AdminSettingsPage() {
             <Label htmlFor="brandName">Tên Thương hiệu</Label>
             <Input id="brandName" name="brandName" value={settings.brandName || ''} onChange={handleInputChange} disabled={isSubmitting} />
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="logoUpload">Logo Thương hiệu</Label>
             <div className="flex items-center gap-4">
               {logoPreview && (
                 <div className="relative w-20 h-20 border rounded-md overflow-hidden bg-muted">
-                  <NextImage src={logoPreview} alt="Xem trước logo" layout="fill" objectFit="contain" data-ai-hint="logo preview"/>
+                  <NextImage src={logoPreview} alt="Xem trước logo" layout="fill" objectFit="contain" data-ai-hint="logo preview" />
                 </div>
               )}
               <div className="flex-grow space-y-2">
-                <Input 
-                  id="logoUpload" 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleLogoFileChange} 
+                <Input
+                  id="logoUpload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFileChange}
                   ref={logoInputRef}
                   className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                   disabled={isSubmitting}
                 />
-                 <p className="text-xs text-muted-foreground">Tải lên logo (khuyên dùng .png, .svg, kích thước tối đa {MAX_LOGO_SIZE_MB}MB).</p>
+                <p className="text-xs text-muted-foreground">Tải lên logo (khuyên dùng .png, .svg, kích thước tối đa {MAX_LOGO_SIZE_MB}MB).</p>
               </div>
               {logoPreview && (
                 <Button variant="ghost" size="icon" onClick={handleRemoveLogo} disabled={isSubmitting} title="Xóa logo đã tải lên">
@@ -304,11 +296,11 @@ export default function AdminSettingsPage() {
 
           <div className="space-y-2">
             <Label htmlFor="logoUrl">Hoặc URL Logo bên ngoài</Label>
-            <Input id="logoUrl" name="logoUrl" type="url" placeholder="https://example.com/logo.png" value={settings.logoUrl || ''} onChange={(e) => { handleInputChange(e); if (e.target.value) setLogoPreview(e.target.value);}} disabled={isSubmitting} />
-             <p className="text-xs text-muted-foreground">Nếu bạn tải lên logo, trường này sẽ bị bỏ qua.</p>
+            <Input id="logoUrl" name="logoUrl" type="url" placeholder="https://example.com/logo.png" value={settings.logoUrl || ''} onChange={(e) => { handleInputChange(e); if (e.target.value) setLogoPreview(e.target.value); }} disabled={isSubmitting} />
+            <p className="text-xs text-muted-foreground">Nếu bạn tải lên logo, trường này sẽ bị bỏ qua.</p>
           </div>
 
-           <div className="space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="footerText">Chữ Chân trang</Label>
             <Input id="footerText" name="footerText" value={settings.footerText || ''} onChange={handleInputChange} disabled={isSubmitting} />
           </div>
@@ -317,8 +309,64 @@ export default function AdminSettingsPage() {
             <Textarea id="greetingMessage" name="greetingMessage" value={settings.greetingMessage || ''} onChange={handleInputChange} disabled={isSubmitting} placeholder="Ví dụ: Tôi là trợ lý AI của bạn..." />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="suggestedQuestions">Câu hỏi gợi ý (Mỗi câu một dòng)</Label>
-            <Textarea id="suggestedQuestions" name="suggestedQuestions" value={(settings.suggestedQuestions || []).join('\n')} onChange={handleSuggestedQuestionsChange} disabled={isSubmitting} placeholder="Dịch vụ của bạn là gì?\nĐặt lịch hẹn"/>
+            <Label htmlFor="suggestedQuestions">Câu hỏi gợi ý</Label>
+            <div className="space-y-2">
+              {settings.suggestedQuestions && settings.suggestedQuestions.map((qa, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <div className="grid grid-cols-2 gap-2 flex-grow">
+                    <Input
+                      placeholder="Câu hỏi"
+                      value={qa.question}
+                      onChange={(e) => {
+                        const newQuestions = [...settings.suggestedQuestions!];
+                        newQuestions[index].question = e.target.value;
+                        setSettings(prev => ({ ...prev, suggestedQuestions: newQuestions }));
+                      }}
+                      disabled={isSubmitting}
+                    />
+                    <Input
+                      placeholder="Câu trả lời"
+                      value={qa.answer}
+                      onChange={(e) => {
+                        const newQuestions = [...settings.suggestedQuestions!];
+                        newQuestions[index].answer = e.target.value;
+                        setSettings(prev => ({ ...prev, suggestedQuestions: newQuestions }));
+                      }}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      const newQuestions = [...settings.suggestedQuestions!];
+                      newQuestions.splice(index, 1);
+                      setSettings(prev => ({ ...prev, suggestedQuestions: newQuestions }));
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newQuestion = { question: '', answer: '' };
+                  setSettings(prev => ({
+                    ...prev,
+                    suggestedQuestions: [...(prev.suggestedQuestions || []), newQuestion]
+                  }));
+                }}
+                disabled={isSubmitting}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" /> Thêm câu hỏi gợi ý
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Thêm các câu hỏi và câu trả lời gợi ý sẽ hiển thị cho khách hàng.</p>
           </div>
         </CardContent>
       </Card>
@@ -343,21 +391,21 @@ export default function AdminSettingsPage() {
             <Label htmlFor="metaKeywords">Từ khóa Meta (cách nhau bằng dấu phẩy)</Label>
             <Input id="metaKeywords" name="metaKeywords" value={(settings.metaKeywords || []).join(', ')} onChange={handleMetaKeywordsChange} disabled={isSubmitting} />
           </div>
-           <div className="space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="openGraphImageUrl">URL Hình ảnh OpenGraph</Label>
             <Input id="openGraphImageUrl" name="openGraphImageUrl" type="url" placeholder="https://example.com/og-image.png" value={settings.openGraphImageUrl || ''} onChange={handleInputChange} disabled={isSubmitting} />
           </div>
-           <div className="space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="robotsTxtContent">Nội dung robots.txt</Label>
             <Textarea id="robotsTxtContent" name="robotsTxtContent" rows={5} value={settings.robotsTxtContent || ''} onChange={handleInputChange} disabled={isSubmitting} />
           </div>
-           <div className="space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="sitemapXmlContent">Nội dung sitemap.xml (cơ bản)</Label>
             <Textarea id="sitemapXmlContent" name="sitemapXmlContent" rows={5} value={settings.sitemapXmlContent || ''} onChange={handleInputChange} disabled={isSubmitting} />
           </div>
         </CardContent>
       </Card>
-      
+
       <Separator />
 
       <Card>
@@ -381,7 +429,7 @@ export default function AdminSettingsPage() {
             <Input id="workingHours" name="workingHours" value={(settings.workingHours || []).join(', ')} onChange={handleWorkingHoursChange} placeholder="Ví dụ: 09:00, 10:00, 13:30, 14:30" disabled={isSubmitting} />
             <p className="text-xs text-muted-foreground">Các giờ bắt đầu của lịch hẹn. Ví dụ: 09:00,10:00,14:00,15:00</p>
           </div>
-          
+
           <div className="space-y-2">
             <Label><CalendarDays className="inline mr-1 h-4 w-4" />Ngày nghỉ hàng tuần</Label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -402,10 +450,10 @@ export default function AdminSettingsPage() {
           <div className="space-y-2">
             <Label><CalendarDays className="inline mr-1 h-4 w-4" />Ngày nghỉ Lễ/Đặc biệt (một lần)</Label>
             <div className="flex gap-2 items-center">
-              <Input 
-                type="date" 
-                value={newOneTimeOffDate} 
-                onChange={e => setNewOneTimeOffDate(e.target.value)} 
+              <Input
+                type="date"
+                value={newOneTimeOffDate}
+                onChange={e => setNewOneTimeOffDate(e.target.value)}
                 disabled={isSubmitting}
                 className="max-w-xs"
               />
@@ -422,21 +470,21 @@ export default function AdminSettingsPage() {
               ))}
             </ul>
           </div>
-          
+
           <Separator />
-           <div>
+          <div>
             <h4 className="text-md font-semibold mb-2">Quy tắc cho Ngày Cụ thể</h4>
             <p className="text-sm text-muted-foreground mb-3">Ghi đè các quy tắc chung cho một ngày nhất định. Để trống các trường nếu muốn dùng giá trị chung.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3 border rounded-md mb-4">
-                <Input type="date" value={newSpecificRuleDate} onChange={e => setNewSpecificRuleDate(e.target.value)} placeholder="Ngày (YYYY-MM-DD)" className="h-9"/>
-                <Input value={newSpecificRuleWorkingHours} onChange={e => setNewSpecificRuleWorkingHours(e.target.value)} placeholder="Giờ làm việc (HH:MM, HH:MM)" className="h-9"/>
-                <Input type="number" value={newSpecificRuleStaff} onChange={e => setNewSpecificRuleStaff(e.target.value)} placeholder="Số nhân viên" className="h-9"/>
-                <Input type="number" value={newSpecificRuleDuration} onChange={e => setNewSpecificRuleDuration(e.target.value)} placeholder="Thời gian DV (phút)" className="h-9"/>
-                <div className="flex items-center space-x-2 col-span-full md:col-span-1">
-                    <Checkbox id="newSpecificRuleIsOff" checked={newSpecificRuleIsOff} onCheckedChange={(checked) => setNewSpecificRuleIsOff(!!checked)} />
-                    <Label htmlFor="newSpecificRuleIsOff">Ngày nghỉ</Label>
-                </div>
-                <Button onClick={handleAddSpecificRule} size="sm" className="col-span-full md:col-span-1 h-9"><PlusCircle className="mr-1 h-4 w-4"/>Thêm quy tắc ngày</Button>
+              <Input type="date" value={newSpecificRuleDate} onChange={e => setNewSpecificRuleDate(e.target.value)} placeholder="Ngày (YYYY-MM-DD)" className="h-9" />
+              <Input value={newSpecificRuleWorkingHours} onChange={e => setNewSpecificRuleWorkingHours(e.target.value)} placeholder="Giờ làm việc (HH:MM, HH:MM)" className="h-9" />
+              <Input type="number" value={newSpecificRuleStaff} onChange={e => setNewSpecificRuleStaff(e.target.value)} placeholder="Số nhân viên" className="h-9" />
+              <Input type="number" value={newSpecificRuleDuration} onChange={e => setNewSpecificRuleDuration(e.target.value)} placeholder="Thời gian DV (phút)" className="h-9" />
+              <div className="flex items-center space-x-2 col-span-full md:col-span-1">
+                <Checkbox id="newSpecificRuleIsOff" checked={newSpecificRuleIsOff} onCheckedChange={(checked) => setNewSpecificRuleIsOff(!!checked)} />
+                <Label htmlFor="newSpecificRuleIsOff">Ngày nghỉ</Label>
+              </div>
+              <Button onClick={handleAddSpecificRule} size="sm" className="col-span-full md:col-span-1 h-9"><PlusCircle className="mr-1 h-4 w-4" />Thêm quy tắc ngày</Button>
             </div>
 
             {(settings.specificDayRules || []).length > 0 && (
@@ -444,16 +492,16 @@ export default function AdminSettingsPage() {
                 {(settings.specificDayRules || []).map((rule, index) => (
                   <Card key={rule.id || index} className="p-3 bg-muted/30">
                     <div className="flex justify-between items-start mb-2">
-                        <p className="font-semibold text-sm">Ngày: {isValidDateFns(parse(rule.date, 'yyyy-MM-dd', new Date())) ? format(parse(rule.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy') : 'Ngày không hợp lệ'}</p>
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveSpecificRule(rule.id!)} className="h-6 w-6">
-                           <Trash2 className="h-3 w-3 text-destructive"/>
-                        </Button>
+                      <p className="font-semibold text-sm">Ngày: {isValidDateFns(parse(rule.date, 'yyyy-MM-dd', new Date())) ? format(parse(rule.date, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy') : 'Ngày không hợp lệ'}</p>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveSpecificRule(rule.id!)} className="h-6 w-6">
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        <p>Ngày nghỉ: {rule.isOff ? <span className="text-red-500">Có</span> : 'Không'}</p>
-                        <p>Giờ làm việc: {rule.workingHours?.join(', ') || <span className="italic">Như chung</span>}</p>
-                        <p>Số nhân viên: {rule.numberOfStaff !== undefined ? rule.numberOfStaff : <span className="italic">Như chung</span>}</p>
-                        <p>Thời gian DV: {rule.serviceDurationMinutes !== undefined ? `${rule.serviceDurationMinutes} phút` : <span className="italic">Như chung</span>}</p>
+                      <p>Ngày nghỉ: {rule.isOff ? <span className="text-red-500">Có</span> : 'Không'}</p>
+                      <p>Giờ làm việc: {rule.workingHours?.join(', ') || <span className="italic">Như chung</span>}</p>
+                      <p>Số nhân viên: {rule.numberOfStaff !== undefined ? rule.numberOfStaff : <span className="italic">Như chung</span>}</p>
+                      <p>Thời gian DV: {rule.serviceDurationMinutes !== undefined ? `${rule.serviceDurationMinutes} phút` : <span className="italic">Như chung</span>}</p>
                     </div>
                   </Card>
                 ))}
@@ -464,22 +512,21 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-       <Card>
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Settings2 className="mr-2 h-5 w-5 text-primary" /> Cấu hình Khác</CardTitle>
           <CardDescription>Các cấu hình hệ thống chung (hiện tại chưa có).</CardDescription>
         </CardHeader>
         <CardContent>
-            <p className="text-muted-foreground">Chưa có cấu hình chung khác.</p>
+          <p className="text-muted-foreground">Chưa có cấu hình chung khác.</p>
         </CardContent>
       </Card>
 
       <div className="py-6 flex justify-end">
         <Button onClick={handleSaveSettings} disabled={isSubmitting || isLoading}>
-            <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Đang lưu...' : 'Lưu Tất cả Cài đặt'}
+          <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Đang lưu...' : 'Lưu Tất cả Cài đặt'}
         </Button>
       </div>
     </div>
   );
 }
-    

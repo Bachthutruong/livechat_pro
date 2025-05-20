@@ -1,4 +1,3 @@
-
 // src/components/chat/MessageInputForm.tsx
 'use client';
 
@@ -182,8 +181,17 @@ export function MessageInputForm({ onSubmit, isLoading, onBookAppointmentClick }
           </PopoverContent>
         </Popover>
         {onBookAppointmentClick && (
-          <Button type="button" variant="ghost" size="icon" onClick={onBookAppointmentClick} disabled={isLoading} aria-label="Đặt lịch hẹn">
-            <CalendarPlus className="h-5 w-5" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBookAppointmentClick}
+            disabled={isLoading}
+            className="flex items-center gap-1"
+            aria-label="Đặt lịch hẹn"
+          >
+            <CalendarPlus className="h-4 w-4" />
+            <span>Đặt lịch</span>
           </Button>
         )}
         <Textarea

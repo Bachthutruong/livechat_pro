@@ -1,4 +1,3 @@
-
 export type Message = {
   id: string;
   sender: 'user' | 'ai' | 'system';
@@ -136,10 +135,15 @@ export type SpecificDayRule = {
   serviceDurationMinutes?: number;
 };
 
+export type SuggestedQuestion = {
+  question: string;
+  answer: string;
+};
+
 export type AppSettings = {
   id: string;
   greetingMessage?: string;
-  suggestedQuestions?: string[];
+  suggestedQuestions?: SuggestedQuestion[];
 
   brandName?: string;
   logoUrl?: string;

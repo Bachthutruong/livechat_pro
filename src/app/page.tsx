@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 'use client';
 
@@ -8,12 +7,12 @@ import Link from 'next/link';
 import { AppHeader } from '@/components/layout/AppHeader';
 // import { AppFooter } from '@/components/layout/AppFooter'; // Footer removed for customer chat
 import { ChatInterface } from '@/components/chat/ChatInterface';
-import type { Message, UserSession, Conversation, MessageViewerRole, AppointmentBookingFormData } from '@/lib/types';
-import { 
-  handleCustomerAccess, 
-  processUserMessage, 
-  createNewConversationForUser, 
-  getConversationHistory, 
+import type { Message, UserSession, Conversation, MessageViewerRole, AppointmentBookingFormData, SuggestedQuestion } from '@/lib/types';
+import {
+  handleCustomerAccess,
+  processUserMessage,
+  createNewConversationForUser,
+  getConversationHistory,
   getUserConversations,
   getMessagesByIds,
   updateConversationTitle,
@@ -38,7 +37,7 @@ export default function HomePage() {
   const [initialSessionFromStorage, setInitialSessionFromStorage] = useState<UserSession | null>(null);
 
   const [currentMessages, setCurrentMessages] = useState<Message[]>([]);
-  const [currentSuggestedReplies, setCurrentSuggestedReplies] = useState<string[]>([]);
+  const [currentSuggestedReplies, setCurrentSuggestedReplies] = useState<SuggestedQuestion[]>([]);
   const [isLoadingSession, setIsLoadingSession] = useState<boolean>(true);
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
 
@@ -85,7 +84,7 @@ export default function HomePage() {
       } else {
         setCurrentSuggestedReplies([]);
       }
-      
+
       setCurrentUserSession(prev => {
         if (prev && prev.id === customerId) { // Check if prev exists
           const updatedSession = { ...prev, currentConversationId: conversationId };
@@ -114,9 +113,9 @@ export default function HomePage() {
     try {
       let userConversations = await getUserConversations(session.id);
       let targetConversation: Conversation | null = null;
-      
+
       if (userConversations.length > 0) {
-          targetConversation = userConversations[0]; // Customer has one primary conversation
+        targetConversation = userConversations[0]; // Customer has one primary conversation
       } else {
         const newConvDoc = await createNewConversationForUser(session.id, `Trò chuyện với ${session.name || session.phoneNumber}`);
         if (newConvDoc) {
@@ -171,7 +170,7 @@ export default function HomePage() {
       if (initialSessionFromStorage.role === 'customer') {
         loadInitialData(initialSessionFromStorage);
       } else {
-        setIsLoadingSession(false); 
+        setIsLoadingSession(false);
       }
     } else {
       // If initialSessionFromStorage is null after the first effect (e.g. user was redirected)
@@ -216,11 +215,11 @@ export default function HomePage() {
     const currentSessionString = sessionStorage.getItem('aetherChatUserSession');
     let role: UserSession['role'] | null = null;
     if (currentSessionString) {
-        try {
-            role = JSON.parse(currentSessionString).role;
-        } catch (e) { /* ignore */ }
+      try {
+        role = JSON.parse(currentSessionString).role;
+      } catch (e) { /* ignore */ }
     }
-    
+
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
@@ -235,9 +234,9 @@ export default function HomePage() {
     setConversations([]);
 
     if (role === 'admin' || role === 'staff') {
-        router.push('/login');
+      router.push('/login');
     } else {
-        router.push('/enter-phone');
+      router.push('/enter-phone');
     }
   };
 
@@ -249,7 +248,6 @@ export default function HomePage() {
       sender: 'user',
       content: messageContent,
       timestamp: new Date(),
-      conversationId: activeConversationId,
       name: currentUserSession.name || `Người dùng ${currentUserSession.phoneNumber}`,
     };
 
@@ -262,7 +260,7 @@ export default function HomePage() {
         messageContent,
         currentUserSession,
         activeConversationId,
-        [...currentMessages, userMessage] 
+        [...currentMessages, userMessage]
       );
 
       setCurrentMessages((prevMessages) => {
@@ -287,10 +285,9 @@ export default function HomePage() {
         sender: 'system',
         content: 'Xin lỗi, tôi gặp lỗi. Vui lòng thử lại.',
         timestamp: new Date(),
-        conversationId: activeConversationId,
       };
       setCurrentMessages((prevMessages) => [...prevMessages, errorMessage]);
-       toast({
+      toast({
         title: "Lỗi tin nhắn",
         description: "Không thể xử lý tin nhắn của bạn. Vui lòng thử lại.",
         variant: "destructive",
@@ -298,6 +295,26 @@ export default function HomePage() {
     } finally {
       setIsChatLoading(false);
     }
+  };
+
+  const handleSuggestedReplyClick = (reply: SuggestedQuestion) => {
+    // First send the question
+    handleSendMessage(reply.question);
+
+    // Then after a short delay, send the AI response
+    setTimeout(() => {
+      if (!activeConversationId) return;
+
+      const aiMessage: Message = {
+        id: `msg_ai_reply_${Date.now()}`,
+        sender: 'ai',
+        content: reply.answer,
+        timestamp: new Date(),
+        name: 'AI',
+      };
+
+      setCurrentMessages(prev => [...prev, aiMessage]);
+    }, 500);
   };
 
   const handleSelectConversation = useCallback(async (conversationId: string) => {
@@ -327,71 +344,71 @@ export default function HomePage() {
   const handleUpdateConversationTitle = async (conversationId: string, newTitle: string) => {
     if (!currentUserSession) return;
     try {
-        const updatedConversation = await updateConversationTitle(conversationId, newTitle, currentUserSession.id);
-        if (updatedConversation) {
-            setConversations(prev => prev.map(c => c.id === conversationId ? updatedConversation : c));
-            toast({ title: "Thành công", description: "Đã cập nhật tiêu đề cuộc trò chuyện." });
-        }
+      const updatedConversation = await updateConversationTitle(conversationId, newTitle, currentUserSession.id);
+      if (updatedConversation) {
+        setConversations(prev => prev.map(c => c.id === conversationId ? updatedConversation : c));
+        toast({ title: "Thành công", description: "Đã cập nhật tiêu đề cuộc trò chuyện." });
+      }
     } catch (error: any) {
-        toast({ title: "Lỗi", description: error.message || "Không thể cập nhật tiêu đề.", variant: "destructive" });
+      toast({ title: "Lỗi", description: error.message || "Không thể cập nhật tiêu đề.", variant: "destructive" });
     }
   };
 
   const handlePinConversation = async (conversationId: string) => {
-      if (!currentUserSession) return;
-      try {
-          const updatedProfile = await pinConversationForUser(currentUserSession.id, conversationId);
-          if (updatedProfile && updatedProfile.pinnedConversationIds) {
-              setCurrentUserSession(prev => prev ? {...prev, pinnedConversationIds: updatedProfile.pinnedConversationIds} : null);
-              setConversations(prev => prev.map(c => c.id === conversationId ? {...c, isPinned: true} : c));
-              toast({title: "Thành công", description: "Đã ghim cuộc trò chuyện."});
-          }
-      } catch (error: any) {
-          toast({title: "Lỗi", description: error.message, variant: "destructive"});
+    if (!currentUserSession) return;
+    try {
+      const updatedProfile = await pinConversationForUser(currentUserSession.id, conversationId);
+      if (updatedProfile && updatedProfile.pinnedConversationIds) {
+        setCurrentUserSession(prev => prev ? { ...prev, pinnedConversationIds: updatedProfile.pinnedConversationIds } : null);
+        setConversations(prev => prev.map(c => c.id === conversationId ? { ...c, isPinned: true } : c));
+        toast({ title: "Thành công", description: "Đã ghim cuộc trò chuyện." });
       }
+    } catch (error: any) {
+      toast({ title: "Lỗi", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleUnpinConversation = async (conversationId: string) => {
-      if (!currentUserSession) return;
-      try {
-          const updatedProfile = await unpinConversationForUser(currentUserSession.id, conversationId);
-          if (updatedProfile && updatedProfile.pinnedConversationIds) {
-              setCurrentUserSession(prev => prev ? {...prev, pinnedConversationIds: updatedProfile.pinnedConversationIds} : null);
-              setConversations(prev => prev.map(c => c.id === conversationId ? {...c, isPinned: false} : c));
-              toast({title: "Thành công", description: "Đã bỏ ghim cuộc trò chuyện."});
-          }
-      } catch (error: any) {
-          toast({title: "Lỗi", description: error.message, variant: "destructive"});
+    if (!currentUserSession) return;
+    try {
+      const updatedProfile = await unpinConversationForUser(currentUserSession.id, conversationId);
+      if (updatedProfile && updatedProfile.pinnedConversationIds) {
+        setCurrentUserSession(prev => prev ? { ...prev, pinnedConversationIds: updatedProfile.pinnedConversationIds } : null);
+        setConversations(prev => prev.map(c => c.id === conversationId ? { ...c, isPinned: false } : c));
+        toast({ title: "Thành công", description: "Đã bỏ ghim cuộc trò chuyện." });
       }
+    } catch (error: any) {
+      toast({ title: "Lỗi", description: error.message, variant: "destructive" });
+    }
   };
 
   const handlePinMessage = async (messageId: string) => {
     if (!activeConversationId || !currentUserSession) return;
     try {
-        const updatedConversation = await pinMessageToConversation(activeConversationId, messageId, currentUserSession);
-        if (updatedConversation) {
-            setConversations(prev => prev.map(c => c.id === activeConversationId ? updatedConversation : c));
-            // Also update currentMessages to reflect pinned status
-            setCurrentMessages(prev => prev.map(m => m.id === messageId ? {...m, isPinned: true} : m));
-            toast({title: "Thành công", description: "Đã ghim tin nhắn."});
-        }
+      const updatedConversation = await pinMessageToConversation(activeConversationId, messageId, currentUserSession);
+      if (updatedConversation) {
+        setConversations(prev => prev.map(c => c.id === activeConversationId ? updatedConversation : c));
+        // Also update currentMessages to reflect pinned status
+        setCurrentMessages(prev => prev.map(m => m.id === messageId ? { ...m, isPinned: true } : m));
+        toast({ title: "Thành công", description: "Đã ghim tin nhắn." });
+      }
     } catch (error: any) {
-        toast({title: "Lỗi ghim tin nhắn", description: error.message, variant: "destructive"});
+      toast({ title: "Lỗi ghim tin nhắn", description: error.message, variant: "destructive" });
     }
   };
 
   const handleUnpinMessage = async (messageId: string) => {
-      if (!activeConversationId || !currentUserSession) return;
-      try {
-          const updatedConversation = await unpinMessageFromConversation(activeConversationId, messageId, currentUserSession);
-           if (updatedConversation) {
-            setConversations(prev => prev.map(c => c.id === activeConversationId ? updatedConversation : c));
-            setCurrentMessages(prev => prev.map(m => m.id === messageId ? {...m, isPinned: false} : m));
-            toast({title: "Thành công", description: "Đã bỏ ghim tin nhắn."});
-        }
-      } catch (error: any) {
-          toast({title: "Lỗi bỏ ghim tin nhắn", description: error.message, variant: "destructive"});
+    if (!activeConversationId || !currentUserSession) return;
+    try {
+      const updatedConversation = await unpinMessageFromConversation(activeConversationId, messageId, currentUserSession);
+      if (updatedConversation) {
+        setConversations(prev => prev.map(c => c.id === activeConversationId ? updatedConversation : c));
+        setCurrentMessages(prev => prev.map(m => m.id === messageId ? { ...m, isPinned: false } : m));
+        toast({ title: "Thành công", description: "Đã bỏ ghim tin nhắn." });
       }
+    } catch (error: any) {
+      toast({ title: "Lỗi bỏ ghim tin nhắn", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleDirectBookAppointment = async (formData: AppointmentBookingFormData) => {
@@ -416,10 +433,9 @@ export default function HomePage() {
         sender: 'system',
         content: systemMessageContent,
         timestamp: new Date(),
-        conversationId: activeConversationId,
       };
       setCurrentMessages(prev => [...prev, systemMessage]);
-      if(result.success) setIsBookingModalOpen(false);
+      if (result.success) setIsBookingModalOpen(false);
 
     } catch (error: any) {
       toast({ title: "Lỗi đặt lịch", description: error.message || "Không thể đặt lịch hẹn.", variant: "destructive" });
@@ -462,7 +478,7 @@ export default function HomePage() {
       }
 
       if (currentUserSession.role === 'staff') {
-         return (
+        return (
           <div className="flex-grow flex items-center justify-center p-4">
             <Card className="w-full max-w-md text-center shadow-xl mx-auto my-auto">
               <CardHeader>
@@ -495,28 +511,29 @@ export default function HomePage() {
           onSelectConversation={handleSelectConversation}
           onCreateNewConversation={handleCreateNewConversation}
           isChatLoading={isChatLoading || isLoadingSession}
-          viewerRole="customer_view" 
+          viewerRole="customer_view"
           onUpdateConversationTitle={handleUpdateConversationTitle}
           onPinConversation={handlePinConversation}
           onUnpinConversation={handleUnpinConversation}
           onPinMessage={handlePinMessage}
           onUnpinMessage={handleUnpinMessage}
           onBookAppointmentClick={() => setIsBookingModalOpen(true)}
+          onSuggestedReplyClick={handleSuggestedReplyClick}
         />
       );
     }
 
     return (
-        <div className="flex flex-col items-center justify-center h-full flex-grow">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Đang chuẩn bị...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full flex-grow">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Đang chuẩn bị...</p>
+      </div>
     );
   };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <AppHeader userSession={currentUserSession} onLogout={handleLogout}/>
+      <AppHeader userSession={currentUserSession} onLogout={handleLogout} />
       <main className="flex-grow flex items-stretch w-full overflow-hidden pt-16 h-[calc(100vh-4rem)]">
         {renderContent()}
       </main>
@@ -532,4 +549,4 @@ export default function HomePage() {
     </div>
   );
 }
-    
+

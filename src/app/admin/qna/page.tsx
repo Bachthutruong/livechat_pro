@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Edit3, Trash, MessageCircle, CheckCircle, AlertTriangle, Save } from 'lucide-react';
-import type { KeywordMapping, TrainingData, AppSettings, TrainingDataStatus } from '@/lib/types';
+import type { KeywordMapping, TrainingData, AppSettings, TrainingDataStatus, SuggestedQuestion } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import {
   getAppSettings, updateAppSettings,
@@ -24,7 +24,8 @@ export default function AdminQnaPage() {
 
   // App Settings (Greeting & Suggested Questions)
   const [greeting, setGreeting] = useState('');
-  const [suggestedQuestionsInput, setSuggestedQuestionsInput] = useState(''); // Comma-separated string
+  const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState({ question: '', answer: '' });
   const [isSettingsLoading, setIsSettingsLoading] = useState(false);
 
   // Keyword Mappings
@@ -55,7 +56,24 @@ export default function AdminQnaPage() {
       const settings = await getAppSettings();
       if (settings) {
         setGreeting(settings.greetingMessage || '');
-        setSuggestedQuestionsInput((settings.suggestedQuestions || []).join(', '));
+
+        // Convert older string formats to the new object format if needed
+        if (settings.suggestedQuestions) {
+          const formattedQuestions = settings.suggestedQuestions.map(q => {
+            // If it's already an object with question and answer properties, use it as is
+            if (typeof q === 'object' && q !== null && 'question' in q && 'answer' in q) {
+              return q as SuggestedQuestion;
+            }
+            // If it's a string, convert it to the new format
+            return {
+              question: String(q),
+              answer: 'Không có câu trả lời được đặt trước cho câu hỏi này.'
+            };
+          });
+          setSuggestedQuestions(formattedQuestions);
+        } else {
+          setSuggestedQuestions([]);
+        }
       }
     } catch (error) {
       toast({ title: "Lỗi tải cài đặt", description: "Không thể tải cài đặt lời chào.", variant: "destructive" });
@@ -96,20 +114,25 @@ export default function AdminQnaPage() {
     fetchTrainingData();
   }, [fetchSettings, fetchKeywordMappings, fetchTrainingData]);
 
-  // --- App Settings Handlers ---
-  const handleSaveGreetingSettings = async () => {
-    setIsSubmitting(true);
-    try {
-      await updateAppSettings({
-        greetingMessage: greeting,
-        suggestedQuestions: suggestedQuestionsInput.split(',').map(s => s.trim()).filter(Boolean),
-      });
-      toast({ title: "Thành công", description: "Đã lưu cài đặt lời chào và gợi ý." });
-    } catch (error) {
-      toast({ title: "Lỗi", description: "Không thể lưu cài đặt.", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
+  // --- App Settings Handlers ---  const handleSaveGreetingSettings = async () => {    setIsSubmitting(true);    try {      // Save full objects with both question and answer properties      await updateAppSettings({        greetingMessage: greeting,        suggestedQuestions: suggestedQuestions      });            toast({ title: "Thành công", description: "Đã lưu cài đặt lời chào và gợi ý." });    } catch (error) {      console.error("Error saving settings:", error);      toast({ title: "Lỗi", description: "Không thể lưu cài đặt.", variant: "destructive" });    } finally {      setIsSubmitting(false);    }  };
+
+  const handleAddQuestion = () => {
+    if (currentQuestion.question.trim() === '') {
+      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập câu hỏi.", variant: "destructive" });
+      return;
     }
+
+    setSuggestedQuestions([...suggestedQuestions, {
+      question: currentQuestion.question,
+      answer: currentQuestion.answer || 'Không có câu trả lời được đặt trước cho câu hỏi này.'
+    }]);
+    setCurrentQuestion({ question: '', answer: '' });
+  };
+
+  const handleRemoveQuestion = (index: number) => {
+    const newQuestions = [...suggestedQuestions];
+    newQuestions.splice(index, 1);
+    setSuggestedQuestions(newQuestions);
   };
 
   // --- Keyword Mapping Handlers ---
@@ -125,9 +148,9 @@ export default function AdminQnaPage() {
     setIsSubmitting(true);
     const keywordsArray = kwInput.split(',').map(s => s.trim()).filter(Boolean);
     if (keywordsArray.length === 0 || !kwResponse.trim()) {
-        toast({title: "Thiếu thông tin", description: "Vui lòng nhập từ khóa và phản hồi.", variant: "destructive"});
-        setIsSubmitting(false);
-        return;
+      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập từ khóa và phản hồi.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
     }
     try {
       if (currentKeywordMapping) {
@@ -170,9 +193,9 @@ export default function AdminQnaPage() {
     e.preventDefault();
     setIsSubmitting(true);
     if (!tdUserInput.trim() || !tdLabel.trim()) {
-        toast({title: "Thiếu thông tin", description: "Vui lòng nhập nội dung người dùng và nhãn.", variant: "destructive"});
-        setIsSubmitting(false);
-        return;
+      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập nội dung người dùng và nhãn.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
     }
     const dataToSave = { userInput: tdUserInput, idealResponse: tdIdealResponse, label: tdLabel, status: tdStatus };
     try {
@@ -225,16 +248,56 @@ export default function AdminQnaPage() {
             <Label htmlFor="greeting">Lời chào mừng</Label>
             <Textarea id="greeting" value={greeting} onChange={(e) => setGreeting(e.target.value)} disabled={isSettingsLoading || isSubmitting} />
           </div>
-          <div>
-            <Label htmlFor="suggestedQuestions">Câu hỏi gợi ý (cách nhau bằng dấu phẩy)</Label>
-            <Input 
-              id="suggestedQuestions"
-              value={suggestedQuestionsInput} 
-              onChange={(e) => setSuggestedQuestionsInput(e.target.value)} 
-              placeholder="ví dụ: Dịch vụ, Đặt lịch hẹn"
-              disabled={isSettingsLoading || isSubmitting}
-            />
+
+          <div className="space-y-2">
+            <Label>Câu hỏi gợi ý</Label>
+            <div className="space-y-3">
+              {suggestedQuestions.map((q, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <div className="grid grid-cols-2 gap-2 flex-grow">
+                    <div className="p-2 border rounded text-sm">{q.question}</div>
+                    <div className="p-2 border rounded text-sm">{q.answer}</div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveQuestion(index)}
+                    disabled={isSubmitting}
+                  >
+                    <Trash className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-start space-x-2 pt-2">
+              <div className="grid grid-cols-2 gap-2 flex-grow">
+                <Input
+                  placeholder="Câu hỏi gợi ý"
+                  value={currentQuestion.question}
+                  onChange={(e) => setCurrentQuestion({ ...currentQuestion, question: e.target.value })}
+                  disabled={isSettingsLoading || isSubmitting}
+                />
+                <Input
+                  placeholder="Câu trả lời"
+                  value={currentQuestion.answer}
+                  onChange={(e) => setCurrentQuestion({ ...currentQuestion, answer: e.target.value })}
+                  disabled={isSettingsLoading || isSubmitting}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleAddQuestion}
+                disabled={isSettingsLoading || isSubmitting || !currentQuestion.question.trim()}
+              >
+                <PlusCircle className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
+
           <Button onClick={handleSaveGreetingSettings} disabled={isSettingsLoading || isSubmitting}>
             <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Đang lưu...' : 'Lưu Lời chào & Gợi ý'}
           </Button>
@@ -292,17 +355,16 @@ export default function AdminQnaPage() {
                   <p><span className="font-semibold">Người dùng nhập:</span> {td.userInput}</p>
                   {td.idealResponse && <p><span className="font-semibold">Phản hồi lý tưởng:</span> {td.idealResponse}</p>}
                   <p><span className="font-semibold">Nhãn:</span> {td.label}</p>
-                  <p><span className="font-semibold">Trạng thái:</span> 
-                    <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
-                      td.status === 'approved' ? 'bg-green-100 text-green-700' :
+                  <p><span className="font-semibold">Trạng thái:</span>
+                    <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${td.status === 'approved' ? 'bg-green-100 text-green-700' :
                       td.status === 'pending_review' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'}`}>
+                        'bg-red-100 text-red-700'}`}>
                       {getStatusLabel(td.status)}
                     </span>
                   </p>
                   <div className="mt-2 space-x-2">
                     <Button variant="outline" size="sm" onClick={() => openTrainingDataModal(td)}><Edit3 className="mr-1 h-3 w-3" /> Xem lại/Sửa</Button>
-                     <AlertDialog>
+                    <AlertDialog>
                       <AlertDialogTrigger asChild><Button variant="outline" size="sm" className="text-destructive hover:text-destructive"><Trash className="mr-1 h-3 w-3" /> Xóa</Button></AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader><AlertDialogTitle>Xác nhận xóa</AlertDialogTitle><AlertDialogDescription>Bạn có chắc muốn xóa dữ liệu huấn luyện này?</AlertDialogDescription></AlertDialogHeader>
