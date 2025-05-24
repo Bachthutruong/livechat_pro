@@ -2713,4 +2713,3 @@ export async function deleteQuickReply(id: string): Promise<{ success: boolean }
   const result = await QuickReplyModel.findByIdAndDelete(id);
   return { success: !!result };
 }
-```
