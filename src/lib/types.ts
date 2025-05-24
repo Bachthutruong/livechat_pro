@@ -16,11 +16,11 @@ export type AppointmentStatus = 'booked' | 'cancelled' | 'completed' | 'pending_
 
 export type AppointmentDetails = {
   appointmentId: string;
-  userId: string;
+  userId: string; // This is typically customerId
   service: string;
   productId?: string;
   time: string;
-  date: string;
+  date: string; // Should be YYYY-MM-DD
   branch?: string;
   branchId?: string;
   packageType?: string;
@@ -132,9 +132,9 @@ export type AppointmentRule = {
 
 export type SpecificDayRule = {
   id?: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   isOff?: boolean;
-  workingHours?: string[];
+  workingHours?: string[]; // ["HH:MM", "HH:MM"]
   numberOfStaff?: number;
   serviceDurationMinutes?: number;
 };
@@ -161,25 +161,25 @@ export type AppSettings = {
 
   numberOfStaff?: number;
   defaultServiceDurationMinutes?: number;
-  workingHours?: string[];
-  weeklyOffDays?: number[];
-  oneTimeOffDates?: string[];
+  workingHours?: string[]; // ["HH:MM", "HH:MM"]
+  weeklyOffDays?: number[]; // [0-6] (Sunday-Saturday)
+  oneTimeOffDates?: string[]; // ["YYYY-MM-DD"]
   specificDayRules?: SpecificDayRule[];
 
   outOfOfficeResponseEnabled?: boolean;
   outOfOfficeMessage?: string;
-  officeHoursStart?: string;
-  officeHoursEnd?: string;
-  officeDays?: number[];
+  officeHoursStart?: string; // "HH:MM"
+  officeHoursEnd?: string; // "HH:MM"
+  officeDays?: number[]; // [0-6] (Sunday-Saturday)
 
   updatedAt?: Date;
 };
 
 export type BranchSpecificDayRule = {
   id?: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   isOff?: boolean;
-  workingHours?: string[];
+  workingHours?: string[]; // ["HH:MM", "HH:MM"]
   numberOfStaff?: number;
 };
 
@@ -189,9 +189,9 @@ export type Branch = {
   address?: string;
   contactInfo?: string;
   isActive: boolean;
-  workingHours?: string[];
-  offDays?: number[];
-  numberOfStaff?: number;
+  workingHours?: string[]; // Branch specific working hours ["HH:MM", "HH:MM"]
+  offDays?: number[]; // Branch specific weekly off days [0-6]
+  numberOfStaff?: number; // Branch specific staff count
   specificDayOverrides?: BranchSpecificDayRule[];
   createdAt?: Date;
   updatedAt?: Date;
@@ -199,8 +199,8 @@ export type Branch = {
 
 
 export type GetAppointmentsFilters = {
-  date?: string;
-  dates?: string[];
+  date?: string; // YYYY-MM-DD
+  dates?: string[]; // Array of YYYY-MM-DD
   customerId?: string;
   staffId?: string;
   status?: string[];
@@ -225,9 +225,9 @@ export type StaffDashboardStats = {
 export type ProductSchedulingRules = {
   numberOfStaff?: number;
   serviceDurationMinutes?: number;
-  workingHours?: string[];
-  weeklyOffDays?: number[];
-  oneTimeOffDates?: string[];
+  workingHours?: string[]; // ["HH:MM", "HH:MM"]
+  weeklyOffDays?: number[]; // [0-6]
+  oneTimeOffDates?: string[]; // ["YYYY-MM-DD"]
   specificDayRules?: SpecificDayRule[];
 };
 
@@ -284,7 +284,7 @@ export type Conversation = {
   }>;
   messageIds: string[];
   pinnedMessageIds?: string[];
-  isPinned?: boolean;
+  isPinned?: boolean; // For client-side filtering or sorting if needed, source of truth is customer.pinnedConversationIds
   createdAt: Date;
   updatedAt: Date;
   lastMessageTimestamp?: Date;
@@ -319,3 +319,4 @@ export type EffectiveSchedulingRules = {
   oneTimeOffDates: string[];
   specificDayRules: SpecificDayRule[];
 };
+```
